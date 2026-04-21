@@ -1,22 +1,30 @@
 from pathlib import Path
 import uuid
 
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, Form
 from fastapi.responses import FileResponse
 import pyttsx3
 from PyPDF2 import PdfReader
 from fastapi.middleware.cors import CORSMiddleware
 
+from database import engine, Base, SessionLocal
+import models
+
+Base.metadata.create_all(bind=engine)
+
 app = FastAPI()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # later restrict this in production
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+
+file_settings = {}
 
 
 @app.get("/")
@@ -33,7 +41,11 @@ def favicon():
 
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    voice: str = Form(...),
+    speed: float = Form(...)
+):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
@@ -42,6 +54,27 @@ async def upload_file(file: UploadFile = File(...)):
 
     with pdf_path.open("wb") as f:
         f.write(await file.read())
+    
+    from database import SessionLocal
+    import models
+
+    db = SessionLocal()
+
+    new_file = models.File(
+        id=file_id,
+        filename=pdf_path.name,
+        status="processing",
+        audio_path=""
+    )
+
+    db.add(new_file)
+    db.commit()
+    db.close()
+
+    file_settings[file_id] = {
+        "voice": voice,
+        "speed": speed
+    }
 
     return {"file_id": file_id, "filename": pdf_path.name}
 
@@ -59,6 +92,10 @@ async def process_pdf(websocket: WebSocket, file_id: str):
             await websocket.close()
             return
 
+        settings = file_settings.get(file_id, {})
+        voice = settings.get("voice", "female")
+        speed = settings.get("speed", 1)
+
         text = ""
         with pdf_path.open("rb") as book:
             reader = PdfReader(book)
@@ -75,8 +112,39 @@ async def process_pdf(websocket: WebSocket, file_id: str):
                 await websocket.send_json({"progress": progress})
 
         engine = pyttsx3.init()
+
+        rate = engine.getProperty('rate')
+
+        if speed < 1:
+            engine.setProperty('rate', int(rate * 0.7))
+        elif speed > 1:
+            engine.setProperty('rate', int(rate * 1.3))
+        else:
+            engine.setProperty('rate', rate)
+
+        voices = engine.getProperty('voices')
+
+        if voice == "male" and len(voices) > 0:
+            engine.setProperty('voice', voices[0].id)
+        elif voice == "female" and len(voices) > 1:
+            engine.setProperty('voice', voices[1].id)
+
         engine.save_to_file(text, str(audio_path))
         engine.runAndWait()
+
+        from database import SessionLocal
+        import models
+
+        db = SessionLocal()
+
+        file_record = db.query(models.File).filter(models.File.id == file_id).first()
+
+        if file_record:
+            file_record.status = "done"
+            file_record.audio_path = str(audio_path)
+
+        db.commit()
+        db.close()
 
         await websocket.send_json({
             "done": True,
@@ -89,6 +157,7 @@ async def process_pdf(websocket: WebSocket, file_id: str):
     finally:
         await websocket.close()
 
+
 @app.get("/audio/{file_id}")
 def get_audio(file_id: str):
     audio_path = BASE_DIR / f"{file_id}.mp3"
@@ -96,3 +165,11 @@ def get_audio(file_id: str):
         raise HTTPException(status_code=404, detail="Audio file not found")
 
     return FileResponse(str(audio_path), media_type="audio/mpeg")
+
+@app.get("/files")
+def get_files():
+    db = SessionLocal()
+    files = db.query(models.File).all()
+    db.close()
+
+    return files

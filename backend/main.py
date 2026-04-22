@@ -1,7 +1,7 @@
 from pathlib import Path
 import uuid
 
-from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, Form
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, Form, Header
 from fastapi.responses import FileResponse
 import pyttsx3
 from PyPDF2 import PdfReader
@@ -9,6 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine, Base, SessionLocal
 import models
+
+from auth import hash_password, verify_password
+
+from token import create_token, verify_token
 
 Base.metadata.create_all(bind=engine)
 
@@ -44,8 +48,14 @@ def favicon():
 async def upload_file(
     file: UploadFile = File(...),
     voice: str = Form(...),
-    speed: float = Form(...)
+    speed: float = Form(...),
+    authorization: str = Header(...)
+
 ):
+
+    token = authorization.split(" ")[1]
+    payload = verify_token(token)
+    user_id = payload["user_id"]
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
@@ -55,16 +65,14 @@ async def upload_file(
     with pdf_path.open("wb") as f:
         f.write(await file.read())
     
-    from database import SessionLocal
-    import models
-
     db = SessionLocal()
 
     new_file = models.File(
         id=file_id,
         filename=pdf_path.name,
         status="processing",
-        audio_path=""
+        audio_path="",
+        user_id=user_id
     )
 
     db.add(new_file)
@@ -130,10 +138,8 @@ async def process_pdf(websocket: WebSocket, file_id: str):
             engine.setProperty('voice', voices[1].id)
 
         engine.save_to_file(text, str(audio_path))
-        engine.runAndWait()
-
-        from database import SessionLocal
-        import models
+        
+    engine.runAndWait()
 
         db = SessionLocal()
 
@@ -167,9 +173,51 @@ def get_audio(file_id: str):
     return FileResponse(str(audio_path), media_type="audio/mpeg")
 
 @app.get("/files")
-def get_files():
+def get_files(authorization: str = Header(...)):
+    token = authorization.split(" ")[1]
+    payload = verify_token(token)
+    user_id = payload["user_id"]
+
     db = SessionLocal()
-    files = db.query(models.File).all()
+    files = db.query(models.File).filter(models.File.user_id == user_id).all()
+    db.close()
+ return files
+
+@app.post("/signup")
+def signup(email: str = Form(...), password: str = Form(...)):
+    db = SessionLocal()
+
+    existing = db.query(models.User).filter(models.User.email == email).first()
+    if existing:
+        db.close()
+        return {"error": "User already exists"}
+
+    user = models.User(
+        id=str(uuid.uuid4()),
+        email=email,
+        password=hash_password(password)
+    )
+
+    db.add(user)
+    db.commit()
     db.close()
 
-    return files
+    return {"message": "User created"}
+
+@app.post("/login")
+def login(email: str = Form(...), password: str = Form(...)):
+    db = SessionLocal()
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+
+    if not user or not verify_password(password, user.password):
+        db.close()
+        return {"error": "Invalid credentials"}
+        token = create_token({"user_id": user.id})
+
+    db.close()
+
+    return {
+        "message": "Login successful",
+        "access_token": token
+    }

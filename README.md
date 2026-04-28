@@ -1,3 +1,6 @@
+## Logo Preview
+
+![Logo](frontend/public/CMS.jpeg)
 
 # PDF to Audio Converter
 

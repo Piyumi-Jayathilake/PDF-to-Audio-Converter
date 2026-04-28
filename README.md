@@ -1,23 +1,24 @@
-# 🎧 PDF to Audio Converter
+
+# PDF to Audio Converter
 
 A full-stack web application that converts PDF documents into audio using text-to-speech technology.
 
 ---
 
-## 🚀 Features
+## Features
 
-- 📄 Upload PDF files  
-- 🔍 Extract text from PDF  
-- 🎧 Convert text to audio  
-- 🔄 Real-time progress updates (WebSockets)  
-- ⚙️ Voice selection (Male / Female)  
-- ⚡ Speed control  
-- 📥 Download generated audio  
-- 📜 Conversion history dashboard  
+- Upload PDF files  
+- Extract text from PDF  
+- Convert text to audio  
+- Real-time progress updates (WebSockets)  
+- Voice selection (Male / Female)  
+- Speed control  
+- Download generated audio  
+- Conversion history dashboard  
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - Frontend: React + Tailwind CSS  
 - Backend: FastAPI  
@@ -28,7 +29,7 @@ A full-stack web application that converts PDF documents into audio using text-t
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 PDF-to-Audio-Converter/
 │
@@ -44,7 +45,7 @@ PDF-to-Audio-Converter/
 
 ---
 
-## ▶️ Run Locally
+## Run Locally
 
 ### Backend
 
@@ -61,7 +62,7 @@ npm start
 
 ---
 
-## 📌 Current Status
+## Current Status
 
 - Core functionality completed  
 - UI improvements in progress  
@@ -69,7 +70,7 @@ npm start
 
 ---
 
-## 💡 Future Improvements
+## Future Improvements
 
 - AI human-like voice  
 - Streaming audio playback  
@@ -79,7 +80,7 @@ npm start
 
 ---
 
-## 🧠 Key Highlights
+## Key Highlights
 
 - Real-time processing using WebSockets  
 - FastAPI backend architecture  
@@ -88,12 +89,12 @@ npm start
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Feel free to fork this repository and submit pull requests.
 
 ---
 
-## 📄 License
+## License
 
 This project is open-source and available under the MIT License.

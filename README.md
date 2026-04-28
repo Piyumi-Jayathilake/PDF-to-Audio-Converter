@@ -2,6 +2,8 @@
 
 ![Logo](frontend/src/assets/logo.png)
 
+---
+
 # PDF to Audio Converter
 
 A full-stack web application that converts PDF documents into audio using text-to-speech technology.
@@ -70,6 +72,14 @@ npm start
 - Core functionality completed  
 - UI improvements in progress  
 - Advanced features under development  
+
+---
+## UI Preview
+
+![Login](pypdflogin.png)
+![signup](pypdfsignup.png)
+![conversionpage](convertionpage.png)
+![download](downloadpdf.png)
 
 ---
 

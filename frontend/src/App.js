@@ -28,9 +28,8 @@ function App() {
       setNotification(null);
     }, 3500);
   };
-
-  const API_URL = "https://app-name.onrender.com";
-  const WS_URL = "wss://app-name.onrender.com";
+  const API_URL = process.env.REACT_APP_API_URL;
+  const WS_URL = process.env.REACT_APP_WS_URL;
   // Logout
   const handleLogout = () => {
     localStorage.removeItem("token");

@@ -29,6 +29,8 @@ function App() {
     }, 3500);
   };
 
+  const API_URL = "https://app-name.onrender.com";
+  const WS_URL = "wss://app-name.onrender.com";
   // Logout
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -42,7 +44,7 @@ function App() {
     if (!token) return;
 
     try {
-      const res = await fetch("http://localhost:8000/files", {
+      const res = await fetch(`${API_URL}/files`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -77,7 +79,7 @@ function App() {
       formData.append("email", email);
       formData.append("password", password);
 
-      const res = await axios.post("http://localhost:8000/login", formData);
+      const res = await axios.post(`${API_URL}/login`, formData);
 
       if (res.data.access_token) {
         localStorage.setItem("token", res.data.access_token);
@@ -104,7 +106,7 @@ function App() {
       formData.append("email", email);
       formData.append("password", password);
 
-      const signupRes = await axios.post("http://localhost:8000/signup", formData);
+      const signupRes = await axios.post(`${API_URL}/signup`, formData);
 
       if (signupRes.data.error) {
         showNotification(signupRes.data.error, "error");
@@ -115,7 +117,7 @@ function App() {
       loginFormData.append("email", email);
       loginFormData.append("password", password);
 
-      const loginRes = await axios.post("http://localhost:8000/login", loginFormData);
+      const loginRes = await axios.post(`${API_URL}/login`, loginFormData);
 
       if (loginRes.data.access_token) {
         localStorage.setItem("token", loginRes.data.access_token);
@@ -172,7 +174,7 @@ function App() {
 
     try {
       const res = await axios.post(
-        "http://localhost:8000/upload",
+        `${API_URL}/upload`,
         formData,
         {
           headers: {
@@ -181,7 +183,7 @@ function App() {
         }
       );
 
-      const ws = new WebSocket(`ws://localhost:8000/ws/${res.data.file_id}`);
+      const ws = new WebSocket(`${WS_URL}/ws/${res.data.file_id}`);
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -189,7 +191,7 @@ function App() {
         if (data.progress) setProgress(data.progress);
 
         if (data.done) {
-          setAudioUrl(`http://localhost:8000${data.audio_url}`);
+          setAudioUrl(`${API_URL}${data.audio_url}`);
           setLoading(false);
           fetchFiles();
         }
@@ -481,7 +483,7 @@ function App() {
 
                       {f.status === "done" && (
                         <a
-                          href={`http://localhost:8000/audio/${f.id}`}
+                          href={`${API_URL}/audio/${f.id}`}
                           className="text-blue-400 text-sm"
                         >
                           Download Audio

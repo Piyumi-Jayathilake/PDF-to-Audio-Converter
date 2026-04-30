@@ -18,7 +18,16 @@ function App() {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [notification, setNotification] = useState(null);
   const fileInputRef = useRef(null);
+
+  const showNotification = (message, type = "info") => {
+    setNotification({ message, type });
+    window.clearTimeout(showNotification.timer);
+    showNotification.timer = window.setTimeout(() => {
+      setNotification(null);
+    }, 3500);
+  };
 
   // Logout
   const handleLogout = () => {
@@ -73,20 +82,20 @@ function App() {
       if (res.data.access_token) {
         localStorage.setItem("token", res.data.access_token);
         setToken(res.data.access_token);
-        alert("Login successful");
+        showNotification("Login successful", "success");
       } else {
-        alert(res.data.error);
+        showNotification(res.data.error || "Login failed", "error");
       }
     } catch (err) {
       console.error(err.response?.data);
-      alert("Login failed");
+      showNotification("Login failed", "error");
     }
   };
 
   // Signup
   const handleSignup = async () => {
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      showNotification("Passwords do not match", "error");
       return;
     }
 
@@ -98,7 +107,7 @@ function App() {
       const signupRes = await axios.post("http://localhost:8000/signup", formData);
 
       if (signupRes.data.error) {
-        alert(signupRes.data.error);
+        showNotification(signupRes.data.error, "error");
         return;
       }
 
@@ -113,14 +122,14 @@ function App() {
         setToken(loginRes.data.access_token);
         setPassword("");
         setConfirmPassword("");
-        alert("Registration successful");
+        showNotification("Registration successful", "success");
       } else {
-        alert(signupRes.data.message || "Registration successful. Please log in.");
+        showNotification(signupRes.data.message || "Registration successful. Please log in.", "success");
         setIsLogin(true);
       }
     } catch (err) {
       console.error(err.response?.data);
-      alert("Signup failed");
+      showNotification("Signup failed", "error");
     }
   };
 
@@ -131,7 +140,7 @@ function App() {
     const isPdfExt = selectedFile.name.toLowerCase().endsWith(".pdf");
 
     if (!isPdfMime && !isPdfExt) {
-      alert("PDF only");
+      showNotification("PDF only", "error");
       return;
     }
 
@@ -150,7 +159,7 @@ function App() {
 
   // Upload file
   const uploadFile = async () => {
-    if (!file) return alert("Select a PDF first");
+    if (!file) return showNotification("Select a PDF first", "error");
 
     setLoading(true);
     setProgress(0);
@@ -186,7 +195,7 @@ function App() {
         }
 
         if (data.error) {
-          alert(data.error);
+          showNotification(data.error, "error");
           setLoading(false);
         }
       };
@@ -195,19 +204,34 @@ function App() {
         localStorage.removeItem("token");
         setToken("");
         setFiles([]);
-        alert("Session expired. Please login again.");
+        showNotification("Session expired. Please login again.", "error");
       } else {
         console.error(err);
       }
       setLoading(false);
       if (err?.response?.status !== 401) {
-        alert("Upload failed");
+        showNotification("Upload failed", "error");
       }
     }
   };
 
   return (
     <div className="h-screen overflow-hidden bg-gray-900 text-white">
+      {notification && (
+        <div className="fixed top-4 right-4 z-50 max-w-sm">
+          <div
+            className={`rounded-lg px-4 py-3 shadow-lg border text-sm ${
+              notification.type === "success"
+                ? "bg-green-500/95 border-green-300 text-white"
+                : notification.type === "error"
+                ? "bg-red-500/95 border-red-300 text-white"
+                : "bg-gray-800 border-gray-600 text-white"
+            }`}
+          >
+            {notification.message}
+          </div>
+        </div>
+      )}
       <div className="h-full flex flex-col">
         {token && (
           <header className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-gray-800">

@@ -3,16 +3,14 @@ import uuid
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, Form, Header
 from fastapi.responses import FileResponse
-import pyttsx3
+from gtts import gTTS
 from PyPDF2 import PdfReader
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import engine, Base, SessionLocal
-import models
-
-from auth import hash_password, verify_password
-
-from token import create_token, verify_token
+from backend.database import engine, Base, SessionLocal
+from backend import models
+from backend.auth import hash_password, verify_password
+from backend.auth_token import create_token, verify_token
 
 Base.metadata.create_all(bind=engine)
 
@@ -29,6 +27,22 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 
 file_settings = {}
+
+
+def get_user_id_from_auth(authorization: str) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header is required")
+
+    parts = authorization.split(" ")
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise HTTPException(status_code=401, detail="Invalid authorization format")
+
+    token = parts[1]
+    try:
+        payload = verify_token(token)
+        return payload["user_id"]
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 @app.get("/")
@@ -52,10 +66,8 @@ async def upload_file(
     authorization: str = Header(...)
 
 ):
+    user_id = get_user_id_from_auth(authorization)
 
-    token = authorization.split(" ")[1]
-    payload = verify_token(token)
-    user_id = payload["user_id"]
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files allowed")
 
@@ -64,7 +76,7 @@ async def upload_file(
 
     with pdf_path.open("wb") as f:
         f.write(await file.read())
-    
+
     db = SessionLocal()
 
     new_file = models.File(
@@ -84,7 +96,8 @@ async def upload_file(
         "speed": speed
     }
 
-    return {"file_id": file_id, "filename": pdf_path.name}
+    return {"file_id": file_id}
+
 
 
 @app.websocket("/ws/{file_id}")
@@ -97,7 +110,6 @@ async def process_pdf(websocket: WebSocket, file_id: str):
 
         if not pdf_path.exists():
             await websocket.send_json({"error": "PDF file not found"})
-            await websocket.close()
             return
 
         settings = file_settings.get(file_id, {})
@@ -111,7 +123,6 @@ async def process_pdf(websocket: WebSocket, file_id: str):
 
             if total == 0:
                 await websocket.send_json({"error": "PDF has no pages"})
-                await websocket.close()
                 return
 
             for i, page in enumerate(reader.pages):
@@ -119,28 +130,17 @@ async def process_pdf(websocket: WebSocket, file_id: str):
                 progress = int(((i + 1) / total) * 100)
                 await websocket.send_json({"progress": progress})
 
-        engine = pyttsx3.init()
+        print("Generating audio...")
 
-        rate = engine.getProperty('rate')
+        if not text.strip():
+            raise Exception("No text extracted from PDF")
 
-        if speed < 1:
-            engine.setProperty('rate', int(rate * 0.7))
-        elif speed > 1:
-            engine.setProperty('rate', int(rate * 1.3))
-        else:
-            engine.setProperty('rate', rate)
+        tts = gTTS(text=text, lang='en')
+        tts.save(str(audio_path))
 
-        voices = engine.getProperty('voices')
+        print("Audio saved at:", audio_path) 
 
-        if voice == "male" and len(voices) > 0:
-            engine.setProperty('voice', voices[0].id)
-        elif voice == "female" and len(voices) > 1:
-            engine.setProperty('voice', voices[1].id)
-
-        engine.save_to_file(text, str(audio_path))
         
-    engine.runAndWait()
-
         db = SessionLocal()
 
         file_record = db.query(models.File).filter(models.File.id == file_id).first()
@@ -167,57 +167,78 @@ async def process_pdf(websocket: WebSocket, file_id: str):
 @app.get("/audio/{file_id}")
 def get_audio(file_id: str):
     audio_path = BASE_DIR / f"{file_id}.mp3"
+
     if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
 
-    return FileResponse(str(audio_path), media_type="audio/mpeg")
+    return FileResponse(
+        str(audio_path),
+        media_type="audio/mpeg",
+        filename=f"{file_id}.mp3",
+    )
+
 
 @app.get("/files")
-def get_files(authorization: str = Header(...)):
-    token = authorization.split(" ")[1]
-    payload = verify_token(token)
-    user_id = payload["user_id"]
+def get_files(authorization: str = Header(None)):
+    user_id = get_user_id_from_auth(authorization)
 
     db = SessionLocal()
     files = db.query(models.File).filter(models.File.user_id == user_id).all()
     db.close()
- return files
+
+    return files  
+
 
 @app.post("/signup")
 def signup(email: str = Form(...), password: str = Form(...)):
-    db = SessionLocal()
+    try:
+        db = SessionLocal()
 
-    existing = db.query(models.User).filter(models.User.email == email).first()
-    if existing:
+        existing = db.query(models.User).filter(models.User.email == email).first()
+        if existing:
+            db.close()
+            return {"error": "User already exists"}
+
+        if not email or not password:
+            db.close()
+            raise HTTPException(status_code=400, detail="Email and password required")
+
+        user = models.User(
+            id=str(uuid.uuid4()),
+            email=email,
+            password=hash_password(password)
+        )
+
+        db.add(user)
+        db.commit()
         db.close()
-        return {"error": "User already exists"}
 
-    user = models.User(
-        id=str(uuid.uuid4()),
-        email=email,
-        password=hash_password(password)
-    )
+        return {"message": "User created successfully"}
+    except Exception as e:
+        db.close()
+        raise HTTPException(status_code=500, detail=str(e))
 
-    db.add(user)
-    db.commit()
-    db.close()
 
-    return {"message": "User created"}
 
 @app.post("/login")
 def login(email: str = Form(...), password: str = Form(...)):
-    db = SessionLocal()
+    try:
+        db = SessionLocal()
 
-    user = db.query(models.User).filter(models.User.email == email).first()
+        user = db.query(models.User).filter(models.User.email == email).first()
 
-    if not user or not verify_password(password, user.password):
-        db.close()
-        return {"error": "Invalid credentials"}
+        if not user or not verify_password(password, user.password):
+            db.close()
+            return {"error": "Invalid credentials"}
+
         token = create_token({"user_id": user.id})
 
-    db.close()
+        db.close()
 
-    return {
-        "message": "Login successful",
-        "access_token": token
-    }
+        return {
+            "message": "Login successful",
+            "access_token": token
+        }
+    except Exception as e:
+        db.close()
+        raise HTTPException(status_code=500, detail=str(e))

@@ -12,6 +12,9 @@ from backend import models
 from backend.auth import hash_password, verify_password
 from backend.auth_token import create_token, verify_token
 
+import sys
+print("PYTHON PATH:", sys.path)
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()

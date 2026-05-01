@@ -95,8 +95,13 @@ function App() {
 
   // Signup
   const handleSignup = async () => {
+   
     if (password !== confirmPassword) {
       showNotification("Passwords do not match", "error");
+      return;
+    }
+     if (password.length > 72) {
+      showNotification("Password too long", "error");
       return;
     }
 
